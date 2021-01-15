@@ -1,6 +1,5 @@
 import telebot
-import random
-import sched, time
+import time
 import threading
 import logging
 
