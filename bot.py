@@ -3,17 +3,13 @@ import time
 import threading
 import logging
 
-bot = telebot.TeleBot("TOKEN")
+bot = telebot.TeleBot("1414457957:AAFDmhfa8amUVRICFYrCMkC1nN8Yp0YsZ5Y")
 from telebot import types
 
 
 
 def sleeper():
 	i = 1
-	p = 3
-	i = 1
-	z = 0
-
 	error = []
 	while True:
 		while 1==1:
@@ -47,104 +43,63 @@ time.sleep(5)
 t = threading.Thread(target=sleeper1)
 t.start()
 
+
+
 def sleeper2():
-	errorstart = 5 #для проверки связи
-	errortest = 0
-	on_offstart = 3
-	on_offtest = 0
-	systemstart = 3
-	systemtest = 0
+	TrueM = ["Соединение с ПЛК ОК!", "Задание системы: ПУСК", "Система включена", "Засор фильтра!", "Фиксация аварий:"]
+	FalseM = ["Нет связи с ПЛК!", "Задание системы: СТОП", "Система отключена", "Фильтр чист", "Аварии устранены"]
+
 	alarmstart = 3
 	alarmtest = 0
 	regs = []
+	alarm = ['alarm']
+	prevVal = [None, None, None, None, None]
 	while True:
-		time.sleep(1)
 
-		#проверяем соединение с плк, по данным из файла 2 - нет связи, 1 - есть
-		joinedUsers = sleeper1()
 		regs = sleeper()
-		if int(len(regs)) == 11:
+		r2b11 = int(regs[5]) & 2048 !=0 #есть авария? 
+		alarm = int(r2b11)
+		error = int(regs[10]) & 1 != 0
+		on_off = int(regs[3]) & 16 !=0 #текущее заданее
+		system = int(regs[3]) & 8 !=0 # текущее состояние системы
+		Filter = int(regs[5]) & 8192 !=0 # Засор приточного фильтр
+		
+		Val = [error, on_off, system, Filter, alarm]
 
-			error = int(regs[10])
-			errortest = error + errorstart
-			if errortest == 4:
-				info = "Соединение с ПЛК ОК!"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				errorstart = 5
-			elif errortest == 7:
-				info = "Нет связи с ПЛК!"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				errorstart = 3
-			else:
-				pass
+		AutoMessage(TrueM, FalseM, Val, prevVal, 4)
 
-			#проверяем соединение с плк, по данным из файла 2 - нет связи, 1 - есть
-			r0b4 = int(regs[3]) & 16 !=0 #текущее заданее
-			on_off = int(r0b4)
-			on_offtest = on_off + on_offstart
-			if on_offtest == 4:
-				info = "Задание системы: ПУСК"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				on_offstart = 5
-			elif on_offtest == 5:
-				info = "Задание системы: СТОП"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				on_offstart = 3
-			else:
-				pass
-
-			r0b3 = int(regs[3]) & 8 !=0 # текущее состояние системы
-			system = int(r0b3)
-			systemtest = system + systemstart
-			if systemtest == 4:
-				info = "Система включена"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				systemstart = 5
-			elif systemtest == 5:
-				info = "Система отключена"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				systemstart = 3
-			else:
-				pass
-
-			r2b11 = int(regs[5]) & 2048 !=0 #есть авария? 
-			alarm = int(r2b11)
-			alarmtest = alarm + alarmstart
-			if alarmtest == 4:
-				info = "Фиксация аварии"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-					markup = types.InlineKeyboardMarkup(row_width = 1)
-					item1 = types.InlineKeyboardButton("Просмотр текущих аварий", callback_data='alarm')
-					markup.add(item1)
-					bot.send_message(user, 'Посмотреть текущие аварии?', reply_markup=markup)
-				alarmstart = 5
-			elif alarmtest == 5:
-				info = "Аварии устранены"
-				for user in joinedUsers:
-					bot.send_message(user, info)
-				alarmstart = 3
-			else:
-				pass
-		else:
-			pass			
-
-			
-time.sleep(5)
-print(sleeper())
-
+		prevVal = Val
 t = threading.Thread(target=sleeper2)
 t.start()
 
-time.sleep(5)
+def AutoMessage(TrueM, FalseM, Val, prevVal, SendAlarm):
+		joinedUsers = sleeper1()
+		regs = []
+		regs = sleeper()
+		i = 0
+		maxlen = int(len(TrueM))
+		while i != maxlen:
+			if prevVal[i] is not None:
+				if Val[i] != prevVal[i]:
+					if Val[i]:
+						info = TrueM[i]
+						for user in joinedUsers:
+							bot.send_message(user, info)
+							if SendAlarm == i:
+								messages = prepareMessage('alarm', regs)
+								for objMessage in messages:
+									bot.send_message(user, objMessage.text)
+					else:
+						info = FalseM[i]
+						for user in joinedUsers:
+							bot.send_message(user, info)
+			i = i + 1
+	
+	
 
-joinedUsers = sleeper1()
+
+time.sleep(2)
+
 
 with open("password.txt", "r") as readpassword:
 	password = readpassword.read()
@@ -209,38 +164,57 @@ def mess(message):
 		bot.send_message(user, message.text[message.text.find(' '):])
 
 @bot.message_handler(content_types=['text'])
-def send_echo(message):
+def send_echo(message):	
 		regs = []
 		regs = sleeper()
-		if int(len(regs)) == 11:
-			error = int(regs[10]) & 1 !=0
-		else:
-			error = False
-
+		error = int(regs[10]) & 1 != 0
+		
 		if error:
-			if message.text == 'Состояние системы':
-				print(regs)
-				r0b0 = int(regs[3]) & 1 !=0 # season 0-leto/1 -zima
-				r0b1 = int(regs[3]) & 2 !=0 # auto season
-				r0b2 = int(regs[3]) & 4 !=0 # #местное/дистанционное управление пуском
-				r0b3 = int(regs[3]) & 8 !=0 # текущее состояние системы
-				r0b4 = int(regs[3]) & 16 !=0 #текущее заданее
-				r0b5 = int(regs[3]) & 32 !=0 #задание двигателю П3
-				r0b6 = int(regs[3]) & 64 !=0 #задание двигателю П1
-				r0b7 = int(regs[3]) & 128 !=0 #задание двигателю П2
-				r2b11 = int(regs[5]) & 2048 !=0 #есть авария? 
-				r2b0 = int(regs[5]) & 1 !=0 # авария П3
-				r2b1 = int(regs[5]) & 2 !=0 # авария П1
-				r2b2 = int(regs[5]) & 4 !=0 # авария П2
-				r2b3 = int(regs[5]) & 8 !=0 # авария Ав Фильтр
-				r2b4 = int(regs[5]) & 16 !=0 #авария Пожар
-				r2b5 = int(regs[5]) & 32 !=0 #авария Газ
-				r2b6 = int(regs[5]) & 64 !=0 #авария Тнар
-				r2b7 = int(regs[5]) & 128 !=0 #авария Тцех
-				r2b8 = int(regs[5]) & 256 !=0 #авария Тсмеш
-				r2b9 = int(regs[5]) & 512 !=0 #авария ПускГр
-				r2b10 = int(regs[5]) & 1024 !=0 #авария СтопГр
-				r2b13 = int(regs[5]) & 8192 !=0 # Засор приточного фильтр
+			messages = prepareMessage(message.text, regs)
+			for objMessage in messages:
+				print(objMessage.reply_markup)
+				bot.send_message(message.chat.id, objMessage.text, reply_markup=objMessage.reply_markup)
+
+		else:
+			print("Соединение отсутсвтует")
+			infsys = "Соединение отсутсвтует"
+			bot.send_message(message.chat.id, infsys)
+
+class Message:
+	text = ''
+	reply_markup = None
+
+	def __init__(self, text, reply_markup=None):
+		self.text = text
+		self.reply_markup = reply_markup
+
+		
+def prepareMessage(messageText, regs):
+	messages = []
+	regs = []
+	regs = sleeper()
+	r0b0 = int(regs[3]) & 1 !=0 # season 0-leto/1 -zima
+	r0b1 = int(regs[3]) & 2 !=0 # auto season
+	r0b2 = int(regs[3]) & 4 !=0 # #местное/дистанционное управление пуском
+	r0b3 = int(regs[3]) & 8 !=0 # текущее состояние системы
+	r0b4 = int(regs[3]) & 16 !=0 #текущее заданее
+	r0b5 = int(regs[3]) & 32 !=0 #задание двигателю П3
+	r0b6 = int(regs[3]) & 64 !=0 #задание двигателю П1
+	r0b7 = int(regs[3]) & 128 !=0 #задание двигателю П2
+	r2b11 = int(regs[5]) & 2048 !=0 #есть авария? 
+	r2b0 = int(regs[5]) & 1 !=0 # авария П3
+	r2b1 = int(regs[5]) & 2 !=0 # авария П1
+	r2b2 = int(regs[5]) & 4 !=0 # авария П2
+	r2b3 = int(regs[5]) & 8 !=0 # авария Ав Фильтр
+	r2b4 = int(regs[5]) & 16 !=0 #авария Пожар
+	r2b5 = int(regs[5]) & 32 !=0 #авария Газ
+	r2b6 = int(regs[5]) & 64 !=0 #авария Тнар
+	r2b7 = int(regs[5]) & 128 !=0 #авария Тцех
+	r2b8 = int(regs[5]) & 256 !=0 #авария Тсмеш
+	r2b9 = int(regs[5]) & 512 !=0 #авария ПускГр
+	r2b10 = int(regs[5]) & 1024 !=0 #авария СтопГр
+	r2b13 = int(regs[5]) & 8192 !=0 # Засор приточного фильтр
+	if messageText == 'Состояние системы':
 
 				infsys = "Состояние системы" + "\n\n"
 				infsys += "Система: "  #текущее состояние системы
@@ -288,21 +262,19 @@ def send_echo(message):
 					infsys += "есть!" + "\n"
 				else:
 					infsys += "нет" + "\n"
-				bot.send_message(message.chat.id, infsys)
+				message = Message(infsys)
+				messages.append(message)
+
 				if r2b11:
 					markup = types.InlineKeyboardMarkup(row_width = 1)
 					item1 = types.InlineKeyboardButton("Просмотр текущих аварий", callback_data='alarm')
 
 					markup.add(item1)
-					bot.send_message(message.chat.id, 'Посмотреть текущие аварии?', reply_markup=markup)
-				else:
-					print(0)
+					message = Message('Посмотреть текущие аварии?', markup)
+					messages.append(message)
 
-			
+	elif messageText == 'Температуры':
 
-			elif message.text == 'Температуры':
-
-			
 				time_n_int16 = int(regs[0])
 				if time_n_int16 > 10000:
 					time_n = time_n_int16 - 65535
@@ -320,26 +292,78 @@ def send_echo(message):
 					time_k = time_k_int16 - 65535
 				else: 
 					time_k = time_k_int16					
-
 									
 				answer = "Датчики температур" + "\n\n"
 				answer += "Улица: " + str(int(time_n * 0.1 * 10) / 10) + " °С" + "\n"
 				answer += "В цеху: " + str(int(time_z * 0.1 * 10) / 10) + " °С" + "\n"
 				answer += "В камере смешения: " + str(int(time_k * 0.1 * 10) / 10) + " °С"
 
-
-				bot.send_message(message.chat.id, answer)
-
+				message = Message(answer)
+				messages.append(message)
 			
-			elif message.text == 'Заслонки':
+	elif messageText == 'Заслонки':
 				answer = "Текущее положение заслонок" + "\n\n"
 				answer += "Приток:  " + str(int(regs[6])) + " %" +  "\n"
 				answer += "Камера смешения:  " + str(int(regs[9])) + " %" + "\n"
 				answer += "П1:  " + str(int(regs[7])) + " %" 
 				answer += "          П2:  " + str(int(regs[8]))  + " %"
-				bot.send_message(message.chat.id, answer)
-			else:
-				bot.send_message(message.chat.id, 'Кожаный, я не понимаю что ты от меня хочешь')
+				message = Message(answer)
+				messages.append(message)
+
+	elif messageText == 'alarm':
+				alarm_info = ""	
+				if r2b0:
+					alarm_info += "Авария П3" + "\n"
+
+				if r2b1:
+					alarm_info += "Авария П1" + "\n"
+
+				if r2b2:
+					alarm_info += "Авария П2" + "\n"
+
+				if r2b3:
+					alarm_info += "Авария Фильтр" + "\n"
+
+				if r2b4:
+					alarm_info = "Авария Пожар" + "\n"
+
+				if r2b5:
+					alarm_info += "Авария Газ" + "\n"
+
+				if r2b6:
+					alarm_info += "Авария Тнар" + "\n"
+
+				if r2b7:
+					alarm_info += "Авария Тцех" + "\n"
+
+				if r2b8:
+					alarm_info += "Авария Тсмещ" + "\n"
+
+				if r2b9:
+					alarm_info += "Авария ПускГрафик" + "\n"
+
+				if r2b10:
+					alarm_info += "Авария СтопГрафик" + "\n"
+				message = Message(alarm_info)
+				messages.append(message)
+
+	else:
+				message = Message('Кожаный, я не понимаю что ты от меня хочешь, научи сначала...')
+				messages.append(message)
+
+	return messages	
+	
+@bot.message_handler(content_types=['text'])
+def send_echo(message):	
+		regs = []
+		regs = sleeper()
+		error = int(regs[10]) & 1 != 0
+		
+		if error:
+			messages = prepareMessage(message.text, regs)
+			for objMessage in messages:
+				print(objMessage.text)
+				bot.send_message(message.chat.id, objMessage.text, reply_markup=objMessage.reply_markup)
 
 		else:
 			print("Соединение отсутсвтует")
@@ -348,85 +372,18 @@ def send_echo(message):
 
 
 
-
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
 	try:
 		if call.message:
-			if call.data == 'alarm':
+			# if call.data == 'alarm':
 				regs = []
 				regs = sleeper()
-				r2b0 = int(regs[5]) & 1 !=0 # авария П3
-				r2b1 = int(regs[5]) & 2 !=0 # авария П1
-				r2b2 = int(regs[5]) & 4 !=0 # авария П2
-				r2b3 = int(regs[5]) & 8 !=0 # авария Ав Фильтр
-				r2b4 = int(regs[5]) & 16 !=0 #авария Пожар
-				r2b5 = int(regs[5]) & 32 !=0 #авария Газ
-				r2b6 = int(regs[5]) & 64 !=0 #авария Тнар
-				r2b7 = int(regs[5]) & 128 !=0 #авария Тцех
-				r2b8 = int(regs[5]) & 256 !=0 #авария Тсмеш
-				r2b9 = int(regs[5]) & 512 !=0 #авария ПускГр
-				r2b10 = int(regs[5]) & 1024 !=0 #авария СтопГр
-				r2b13 = int(regs[5]) & 8192 !=0 # Засор приточного фильтр
-				print(r2b2)
-
-				alarm_info = ""	
-				if r2b0:
-					alarm_info += "Авария П3" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b1:
-					alarm_info += "Авария П1" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b2:
-					alarm_info += "Авария П2" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b3:
-					alarm_info += "Авария Фильтр" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b4:
-					alarm_info = "Авария Пожар" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b5:
-					alarm_info += "Авария Газ" + "\n"
-				else:
-					alarm_info += ""
-
-				if r2b6:
-					alarm_info += "Авария Тнар" + "\n"
-				else:
-					alarm_info += "" 
-
-				if r2b7:
-					alarm_info += "Авария Тцех" + "\n"
-				else:
-					alarm_info += ""
-
-				if r2b8:
-					alarm_info += "Авария Тсмещ" + "\n"
-				else:
-					alarm_info += ""
-
-				if r2b9:
-					alarm_info += "Авария ПускГрафик" + "\n"
-				else:
-					alarm_info += ""
-
-				if r2b10:
-					alarm_info += "Авария СтопГрафик" + "\n"
-				else:
-					alarm_info += "" 
-				bot.send_message(call.message.chat.id, alarm_info)
-				bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Текущие аварии:", reply_markup=None) 
+			
+				messages = prepareMessage(call.data, regs)
+				for objMessage in messages:
+					bot.send_message(call.message.chat.id, objMessage.text)
+					bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Текущие аварии:", reply_markup=None) 
 	except Exception as e:
 		print(repr(e))
 
